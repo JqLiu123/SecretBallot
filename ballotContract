@@ -1,0 +1,86 @@
+pragma solidity ^0.6.5;
+//owner发布投票名单和候选人名单；owner开始投票；投票人投票（hash）；
+//owner披露投票；投票人披露；owner公布投票结果；winner为胜者
+contract SecretBallot {
+    address public owner;
+    bytes2 public winner;
+    uint public winnerVotes;
+    uint8 state;
+    bool public voterDecided;
+    bool public candidateDecided;
+    struct Voter {
+        uint voteTo;
+        bool empower;
+        bool voted;
+        bool exposed;
+        uint256 voteHash;
+    }
+    mapping(address=>Voter) voters;
+    struct Candidate{
+        bytes2 name;
+        uint votes;
+    }
+    Candidate[] public candidates;
+    constructor() public {
+        owner = msg.sender;
+        state = 0;
+    }
+    function decideVoters(address[] calldata _voters) external {
+        require(msg.sender == owner,"solo owner to decide voters.");
+        require(voterDecided == false,"once to decide voters.");
+        voterDecided = true;
+        for(uint i=0; i < _voters.length; i++){
+            voters[_voters[i]].empower = true;
+        }
+    }
+    function decideCandidates(bytes2[] calldata _names) external {
+        require(msg.sender == owner,"solo owner to decide candidates.");
+        require(candidateDecided == false,"once to decide candidates.");
+        candidateDecided = true;
+        for(uint i=0; i < _names.length; i++){
+            candidates.push(Candidate({
+                name : _names[i],
+                votes : 0
+            }));
+        }
+    }
+    function startVote() external {
+        require(msg.sender == owner,"solo owner to start.");
+        require(state == 0,"state is not prepare.");
+        state = 1;
+    }
+    function vote(uint256 _hash) external {
+        require(state == 1,"state is not start.");
+        require(voters[msg.sender].voted == false,"already voted.");
+        require(voters[msg.sender].empower == true,"no right.");
+        voters[msg.sender].voted = true;
+        voters[msg.sender].voteHash = _hash;
+    }
+    function exposeVote() external {
+        require(msg.sender == owner,"solo owner to start.");
+        require(state == 1,"state is not start.");
+        state = 2;
+    }
+    function expose(uint _index, uint nonce) external {
+        require(state == 2,"state is not expose.");
+        require(voters[msg.sender].voted == true,"have not voted.");
+        require(voters[msg.sender].exposed == false,"already exposed.");
+        voters[msg.sender].exposed = true;
+        uint256 hash = uint256(keccak256(abi.encode(_index, nonce)));
+        if (hash == voters[msg.sender].voteHash) {
+            candidates[_index].votes += 1;
+        }
+    }
+    function announce() external{
+        require(msg.sender == owner,"solo owner to start.");
+        require(state == 2,"state is not expose.");
+        state = 3;
+        for(uint i = 0; i < candidates.length; i++){
+            if(winnerVotes < candidates[i].votes){
+                winnerVotes = candidates[i].votes;
+                winner = candidates[i].name;
+            }
+        }
+    }
+
+}
